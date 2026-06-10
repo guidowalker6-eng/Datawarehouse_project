@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline Report</title>
+</head>
+<body style="margin:0;padding:0;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;color:#1a1a2e;">
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:24px 0;">
+<tr><td align="center">
+<table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;">
+
+  <!-- ══════════════════════════════════════════
+       HEADER
+  ══════════════════════════════════════════ -->
+  <tr>
+    <td style="background:linear-gradient(135deg,#0d1b4b 0%,#1a3a8f 100%);border-radius:12px 12px 0 0;padding:28px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td>
+            <p style="margin:0 0 4px 0;font-size:11px;color:#8fa8d8;letter-spacing:1.5px;text-transform:uppercase;">Data Warehouse · Bronze Layer</p>
+            <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">{{ pipeline_name }}</h1>
+          </td>
+          <td align="right" valign="top">
+            {% if status == 'SUCCESS' %}
+              <span style="display:inline-block;background:#00c48c;color:#fff;font-size:12px;font-weight:700;padding:6px 16px;border-radius:20px;letter-spacing:0.5px;">✓ SUCCESS</span>
+            {% elif status == 'SUCCESS WITH WARNINGS' %}
+              <span style="display:inline-block;background:#f5a623;color:#fff;font-size:12px;font-weight:700;padding:6px 16px;border-radius:20px;letter-spacing:0.5px;">⚠ WARNINGS</span>
+            {% else %}
+              <span style="display:inline-block;background:#e53935;color:#fff;font-size:12px;font-weight:700;padding:6px 16px;border-radius:20px;letter-spacing:0.5px;">✗ FAILED</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2" style="padding-top:14px;">
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="padding-right:20px;font-size:12px;color:#8fa8d8;"><strong style="color:#c5d5f0;">Ambiente:</strong> {{ environment }}</td>
+                <td style="padding-right:20px;font-size:12px;color:#8fa8d8;"><strong style="color:#c5d5f0;">Run ID:</strong> {{ run_id }}</td>
+                <td style="font-size:12px;color:#8fa8d8;"><strong style="color:#c5d5f0;">Fecha:</strong> {{ datetime }}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ══════════════════════════════════════════
+       KPI CARDS
+  ══════════════════════════════════════════ -->
+  <tr>
+    <td style="background:#ffffff;padding:20px 32px 8px 32px;">
+      <p style="margin:0 0 14px 0;font-size:11px;font-weight:700;color:#6b7280;letter-spacing:1.2px;text-transform:uppercase;">Resumen Ejecutivo</p>
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <!-- Card 1 -->
+          <td width="25%" style="padding:0 6px 12px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+              <tr><td style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;">Total Tablas</td></tr>
+              <tr><td style="font-size:26px;font-weight:700;color:#1a1a2e;">{{ total_tables }}</td></tr>
+            </table>
+          </td>
+          <!-- Card 2 -->
+          <td width="25%" style="padding:0 6px 12px 6px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;">
+              <tr><td style="font-size:10px;color:#16a34a;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;">Exportadas</td></tr>
+              <tr><td style="font-size:26px;font-weight:700;color:#15803d;">{{ tables_exported }}</td></tr>
+            </table>
+          </td>
+          <!-- Card 3 -->
+          <td width="25%" style="padding:0 6px 12px 6px;">
+            {% if tables_failed > 0 %}
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:14px;">
+              <tr><td style="font-size:10px;color:#be123c;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;">Con Error</td></tr>
+              <tr><td style="font-size:26px;font-weight:700;color:#be123c;">{{ tables_failed }}</td></tr>
+            </table>
+            {% else %}
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+              <tr><td style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;">Con Error</td></tr>
+              <tr><td style="font-size:26px;font-weight:700;color:#6b7280;">0</td></tr>
+            </table>
+            {% endif %}
+          </td>
+          <!-- Card 4 -->
+          <td width="25%" style="padding:0 0 12px 6px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;">
+              <tr><td style="font-size:10px;color:#1d4ed8;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;">Success Rate</td></tr>
+              <tr><td style="font-size:26px;font-weight:700;color:#1d4ed8;">{{ success_rate }}%</td></tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <!-- Card 5 -->
+          <td width="25%" style="padding:0 6px 12px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+              <tr><td style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;">Total Registros</td></tr>
+              <tr><td style="font-size:22px;font-weight:700;color:#1a1a2e;">{{ "{:,}".format(total_records) }}</td></tr>
+            </table>
+          </td>
+          <!-- Card 6 -->
+          <td width="25%" style="padding:0 6px 12px 6px;">
+            {% if data_integrity_pct == 100.0 %}
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;">
+              <tr><td style="font-size:10px;color:#16a34a;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;">Integridad Datos</td></tr>
+              <tr><td style="font-size:22px;font-weight:700;color:#15803d;">{{ data_integrity_pct }}%</td></tr>
+            </table>
+            {% elif data_integrity_pct >= 90 %}
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;">
+              <tr><td style="font-size:10px;color:#b45309;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;">Integridad Datos</td></tr>
+              <tr><td style="font-size:22px;font-weight:700;color:#b45309;">{{ data_integrity_pct }}%</td></tr>
+            </table>
+            {% else %}
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:14px;">
+              <tr><td style="font-size:10px;color:#be123c;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;">Integridad Datos</td></tr>
+              <tr><td style="font-size:22px;font-weight:700;color:#be123c;">{{ data_integrity_pct }}%</td></tr>
+            </table>
+            {% endif %}
+          </td>
+          <!-- Card 7 - Runtime -->
+          <td colspan="2" style="padding:0 0 12px 6px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+              <tr><td style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;">Tiempos de Ejecución</td></tr>
+              <tr><td>
+                {% if timing_data %}
+                  {% for t in timing_data %}
+                  <span style="display:inline-block;margin:2px 4px 2px 0;padding:3px 9px;background:#e0e7ff;border-radius:12px;font-size:11px;color:#3730a3;">
+                    {{ t.activity_name }}: {{ (t.duration_ms / 1000) | round(1) }}s
+                  </span>
+                  {% endfor %}
+                {% else %}
+                  <span style="font-size:13px;color:#9ca3af;">{{ runtime }}</span>
+                {% endif %}
+              </td></tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ══════════════════════════════════════════
+       AUDITORÍA 1 — EXPORTACIÓN
+  ══════════════════════════════════════════ -->
+  <tr>
+    <td style="background:#ffffff;padding:8px 32px 8px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+        <tr style="background:#f8fafc;">
+          <td colspan="3" style="padding:12px 16px;border-bottom:1px solid #e2e8f0;">
+            <span style="font-size:12px;font-weight:700;color:#374151;letter-spacing:0.5px;">📦 AUDITORÍA 1 — Exportación de Tablas</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:12px 16px;border-right:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:11px;color:#6b7280;">Exportadas</p>
+            <p style="margin:4px 0 0 0;font-size:20px;font-weight:700;color:#15803d;">{{ tables_exported }}</p>
+          </td>
+          <td style="padding:12px 16px;border-right:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:11px;color:#6b7280;">Errores</p>
+            <p style="margin:4px 0 0 0;font-size:20px;font-weight:700;color:{% if tables_failed > 0 %}#be123c{% else %}#6b7280{% endif %};">{{ tables_failed }}</p>
+          </td>
+          <td style="padding:12px 16px;">
+            <p style="margin:0;font-size:11px;color:#6b7280;">Warnings / Saltados</p>
+            <p style="margin:4px 0 0 0;font-size:20px;font-weight:700;color:#b45309;">{{ export_warnings }}</p>
+          </td>
+        </tr>
+        {% if top_errors %}
+        <tr>
+          <td colspan="3" style="padding:10px 16px;border-top:1px solid #e2e8f0;background:#fff8f8;">
+            <p style="margin:0 0 8px 0;font-size:11px;font-weight:700;color:#be123c;">Top errores:</p>
+            {% for e in top_errors %}
+            <p style="margin:0 0 4px 0;font-size:11px;color:#374151;">
+              <span style="color:#be123c;font-weight:700;">✗</span>
+              <strong>{{ e.db }}.{{ e.tabla }}</strong> — {{ e.error }}
+            </p>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endif %}
+      </table>
+    </td>
+  </tr>
+
+  <!-- ══════════════════════════════════════════
+       AUDITORÍA 2 — VALIDACIÓN DE FILAS
+  ══════════════════════════════════════════ -->
+  <tr>
+    <td style="background:#ffffff;padding:8px 32px 8px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+        <tr style="background:#f8fafc;">
+          <td colspan="4" style="padding:12px 16px;border-bottom:1px solid #e2e8f0;">
+            <span style="font-size:12px;font-weight:700;color:#374151;letter-spacing:0.5px;">🔍 AUDITORÍA 2 — Validación de Filas (Origen vs DW)</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:12px 16px;border-right:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:11px;color:#6b7280;">Match 100%</p>
+            <p style="margin:4px 0 0 0;font-size:20px;font-weight:700;color:#15803d;">{{ row_audit_ok_count }}</p>
+          </td>
+          <td style="padding:12px 16px;border-right:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:11px;color:#6b7280;">Con Diferencias</p>
+            <p style="margin:4px 0 0 0;font-size:20px;font-weight:700;color:{% if row_audit_disc_count > 0 %}#be123c{% else %}#6b7280{% endif %};">{{ row_audit_disc_count }}</p>
+          </td>
+          <td style="padding:12px 16px;border-right:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:11px;color:#6b7280;">No Auditables</p>
+            <p style="margin:4px 0 0 0;font-size:20px;font-weight:700;color:#b45309;">{{ row_audit_noaud_count }}</p>
+          </td>
+          <td style="padding:12px 16px;">
+            <p style="margin:0;font-size:11px;color:#6b7280;">Diferencia Máxima</p>
+            <p style="margin:4px 0 0 0;font-size:20px;font-weight:700;color:{% if max_difference > 0 %}#be123c{% else %}#6b7280{% endif %};">{{ max_difference }}</p>
+          </td>
+        </tr>
+        {% if top_discrepancias %}
+        <tr>
+          <td colspan="4" style="padding:10px 16px;border-top:1px solid #e2e8f0;background:#fff8f8;">
+            <p style="margin:0 0 8px 0;font-size:11px;font-weight:700;color:#be123c;">Top inconsistencias:</p>
+            {% for d in top_discrepancias %}
+            <p style="margin:0 0 4px 0;font-size:11px;color:#374151;">
+              <span style="color:#be123c;font-weight:700;">△</span>
+              <strong>{{ d.tabla }}</strong>
+              — origen: {{ d.source_count }} · DW: {{ d.dw_count }}
+              <span style="color:#be123c;font-weight:700;">{{ d.diff_label }} filas</span>
+            </p>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endif %}
+      </table>
+    </td>
+  </tr>
+
+  <!-- ══════════════════════════════════════════
+       SECCIÓN REQUIERE ATENCIÓN
+  ══════════════════════════════════════════ -->
+  {% if attention_items %}
+  <tr>
+    <td style="background:#ffffff;padding:8px 32px 8px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #fecdd3;border-radius:8px;background:#fff1f2;overflow:hidden;">
+        <tr>
+          <td style="padding:12px 16px;border-bottom:1px solid #fecdd3;">
+            <span style="font-size:12px;font-weight:700;color:#be123c;letter-spacing:0.5px;">🚨 REQUIERE ATENCIÓN</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:10px 16px;">
+            {% for item in attention_items %}
+            <p style="margin:0 0 6px 0;font-size:12px;color:#be123c;">
+              <span style="font-weight:700;">·</span> {{ item }}
+            </p>
+            {% endfor %}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  {% endif %}
+
+  <!-- ══════════════════════════════════════════
+       ADJUNTOS INFO
+  ══════════════════════════════════════════ -->
+  <tr>
+    <td style="background:#ffffff;padding:8px 32px 16px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;">
+        <tr>
+          <td style="font-size:12px;color:#1d4ed8;">
+            <span style="font-weight:700;">📎 Adjuntos:</span>
+            &nbsp; export_audit.xlsx (log operativo completo)
+            &nbsp;·&nbsp; row_validation_audit.xlsx (auditoría de filas detallada)
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- FOOTER -->
+  <tr>
+    <td style="background:#1a1a2e;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center;">
+      <p style="margin:0;font-size:11px;color:#6b7280;">
+        Pipeline DW Pacífico · Bronze Landing Zone ·
+        <a href="{{ logs_url }}" style="color:#4f73d6;text-decoration:none;">Ver logs completos</a>
+      </p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>
