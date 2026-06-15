@@ -160,6 +160,28 @@ def _get_test_recipient(kwargs):
     return [recipient]
 
 
+def _get_prod_recipients(kwargs):
+    raw_value = (
+        kwargs.get('EMAIL_SMTP_PROUD')
+        or kwargs.get('email_smtp_proud')
+        or get_secret_value('EMAIL_SMTP_PROUD')
+        or get_secret_value('email_smtp_proud')
+        # Fallback por si la variable esta registrada como PROD.
+        or kwargs.get('EMAIL_SMTP_PROD')
+        or kwargs.get('email_smtp_prod')
+        or get_secret_value('EMAIL_SMTP_PROD')
+        or get_secret_value('email_smtp_prod')
+    )
+    recipients = _parse_recipients(raw_value)
+    if not recipients:
+        raise ValueError(
+            "No hay destinatarios validos. Define EMAIL_SMTP_PROUD con uno o mas correos."
+        )
+
+    print(f"INFO: Modo productivo email activo. Destinatarios: {', '.join(recipients)}")
+    return recipients
+
+
 def _is_retryable_smtp_error(error):
     if isinstance(error, (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError)):
         return True
@@ -547,7 +569,7 @@ def export_data(audit_summary, *args, **kwargs):
     smtp_user = _required_secret('smtp-prod-user')
     smtp_pass = _required_secret('smtp-prod-password')
 
-    destinatarios = _get_test_recipient(kwargs)
+    destinatarios = _get_prod_recipients(kwargs)
 
     # Credenciales para auditoría y tiempos
     src_host = get_secret_value('BDWORKFLOW_HOST')
@@ -579,6 +601,10 @@ def export_data(audit_summary, *args, **kwargs):
         for x in audit_summary
         if str(x.get('row_audit_block_status') or '').upper() == 'ERROR'
         and str(x.get('row_audit_block_error') or '').strip()
+    ]
+    schema_change_rows = [
+        x for x in audit_summary
+        if isinstance(x.get('schema_changes'), list) and len(x.get('schema_changes')) > 0
     ]
     row_block_error_msg = row_block_errors[0] if row_block_errors else None
     total_records  = sum(x.get('filas', 0) for x in exportados_lst)
@@ -669,6 +695,12 @@ def export_data(audit_summary, *args, **kwargs):
             f"Discrepancia filas: {r.get('target_table') or r.get('tabla','')} "
             f"(origen={r.get('source_count')} DW={r.get('dw_count')} diff={'+' if diff>0 else ''}{diff})"
         )
+    for r in schema_change_rows[:5]:
+        table_name = r.get('target_table') or r.get('tabla', '')
+        changes = r.get('schema_changes') or []
+        cols = ', '.join([str(c.get('column')) for c in changes if c.get('column')])
+        if cols:
+            attention_items.append(f"Schema update: {table_name} (nuevas columnas: {cols})")
     attention_items = attention_items[:5]
 
     data = {
@@ -695,6 +727,7 @@ def export_data(audit_summary, *args, **kwargs):
         'row_audit_noaud_count':   len(audit_noaud),
         'max_difference':          max_diff,
         'top_discrepancias':       top_discrepancias,
+        'schema_change_count':     len(schema_change_rows),
         # Atención
         'attention_items':    attention_items,
         # Tiempos

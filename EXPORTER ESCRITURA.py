@@ -8,12 +8,14 @@ import csv
 import smbclient
 import time
 import traceback
+import re
 
 if 'data_exporter' not in globals():
     from mage_ai.data_preparation.decorators import data_exporter
 
 
 CONTROL_TARGET_COLUMN = 'target_table_name'
+SAFE_IDENTIFIER_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
 
 def get_target_table_name(item):
@@ -62,6 +64,108 @@ def _table_exists_in_bronze(dst_engine, table_name):
             LIMIT 1
         """), {'tbl': table_name}).fetchone()
     return row is not None
+
+
+def _assert_safe_identifier(identifier, label):
+    value = str(identifier or '').strip()
+    if not value:
+        raise ValueError(f"Identificador vacio para {label}")
+    if not SAFE_IDENTIFIER_PATTERN.match(value):
+        raise ValueError(f"Identificador invalido para {label}: {value}")
+    return value
+
+
+def _quote_ident(identifier):
+    return '"' + str(identifier).replace('"', '""') + '"'
+
+
+def _get_target_bronze_columns(dst_engine, target_table):
+    safe_target_table = _assert_safe_identifier(target_table, 'target_table')
+    with dst_engine.connect() as conn:
+        rows = conn.execute(sa.text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'bronze'
+              AND table_name = :tbl
+        """), {'tbl': safe_target_table}).fetchall()
+
+    out = set()
+    for row in rows:
+        row_map = getattr(row, '_mapping', None)
+        col_name = row_map.get('column_name') if row_map else row[0]
+        if col_name:
+            out.add(str(col_name))
+    return out
+
+
+def _sync_missing_columns_in_bronze(dst_engine, target_table, source_columns_with_types):
+    safe_target_table = _assert_safe_identifier(target_table, 'target_table')
+    existing_cols = _get_target_bronze_columns(dst_engine, safe_target_table)
+    missing_cols = [col for col in source_columns_with_types.keys() if col not in existing_cols]
+
+    if not missing_cols:
+        return []
+
+    added = []
+    quoted_table = _quote_ident(safe_target_table)
+
+    with dst_engine.begin() as ddl_conn:
+        for col in missing_cols:
+            safe_col = _assert_safe_identifier(col, f'columna destino {safe_target_table}')
+            sql_type = source_columns_with_types.get(safe_col) or 'TEXT'
+            quoted_col = _quote_ident(safe_col)
+            ddl = sa.text(
+                f"ALTER TABLE bronze.{quoted_table} "
+                f"ADD COLUMN IF NOT EXISTS {quoted_col} {sql_type}"
+            )
+            run_with_retry(
+                lambda ddl=ddl: ddl_conn.execute(ddl),
+                f"add_missing_column_{safe_target_table}.{safe_col}"
+            )
+            added.append({'column': safe_col, 'sql_type': sql_type})
+
+    if added:
+        details = ', '.join([f"{x['column']}:{x['sql_type']}" for x in added])
+        print(f"  [SCHEMA] Columnas agregadas en bronze.{safe_target_table}: {details}")
+
+    return added
+
+
+def _pandas_dtype_to_sql(series):
+    dtype = series.dtype
+    if pd.api.types.is_bool_dtype(dtype):
+        return 'BOOLEAN'
+    if pd.api.types.is_integer_dtype(dtype):
+        return 'BIGINT'
+    if pd.api.types.is_float_dtype(dtype):
+        return 'DOUBLE PRECISION'
+    if pd.api.types.is_datetime64_any_dtype(dtype):
+        return 'TIMESTAMP'
+    if pd.api.types.is_timedelta64_dtype(dtype):
+        return 'INTERVAL'
+    return 'TEXT'
+
+
+def _build_columns_with_types_from_chunk(chunk_df):
+    result = {}
+    for column_name in chunk_df.columns:
+        safe_column_name = _assert_safe_identifier(column_name, 'chunk_column')
+        result[safe_column_name] = _pandas_dtype_to_sql(chunk_df[column_name])
+    return result
+
+
+def _coerce_integer_columns(df):
+    """
+    Pandas lee columnas enteras con NULLs como float64 (ej: 1.0, 2.0).
+    PostgreSQL rechaza esos valores en columnas BIGINT/INTEGER via COPY.
+    Esta funcion convierte float64 que son enteros a Int64 nullable.
+    """
+    for col in df.columns:
+        if pd.api.types.is_float_dtype(df[col]):
+            non_null = df[col].dropna()
+            if len(non_null) > 0 and (non_null == non_null.astype('int64')).all():
+                df[col] = df[col].astype(pd.Int64Dtype())
+    return df
 
 
 def _prepare_full_refresh_target(dst_engine, src_engine, source_table, target_table):
@@ -446,6 +550,9 @@ def export_data(manifest, *args, **kwargs):
                 item_extraction_id = f"{source_prefix}-{run_ts}-{extraction_id_suffix}"
 
                 try:
+                    _assert_safe_identifier(table, f'tabla fuente {db_name}')
+                    _assert_safe_identifier(target_table, f'tabla destino {db_name}.{table}')
+
                     src_engine = sa.create_engine(
                         f"postgresql://{quote_plus(src_user)}:{quote_plus(src_pass)}@{src_host}:5432/{db_name}",
                         connect_args={'connect_timeout': 5, 'client_encoding': 'utf8'}
@@ -539,11 +646,25 @@ def export_data(manifest, *args, **kwargs):
                         )
                         full_refresh_prepared = True
 
+                    schema_changes = []
+
                     first = True
                     for chunk in pd.read_sql(query, src_engine, chunksize=CHUNK_SIZE):
                         chunk['_source_entity'] = source_entity
                         chunk['_extraction_id'] = item_extraction_id
                         chunk['_load_timestamp'] = datetime.now()
+
+                        if first:
+                            chunk_columns_with_types = _build_columns_with_types_from_chunk(chunk)
+                            if run_with_retry(
+                                lambda: _table_exists_in_bronze(dst_engine, target_table),
+                                f"check_target_for_schema_sync_{db_name}.{table}->{target_table}"
+                            ):
+                                schema_changes = _sync_missing_columns_in_bronze(
+                                    dst_engine=dst_engine,
+                                    target_table=target_table,
+                                    source_columns_with_types=chunk_columns_with_types,
+                                )
 
                         if first and not full_refresh_prepared:
                             run_with_retry(
@@ -566,6 +687,8 @@ def export_data(manifest, *args, **kwargs):
                                     f"agregar_row_id_{db_name}.{table}->{target_table}"
                                 )
                         first = False
+
+                        chunk = _coerce_integer_columns(chunk)
 
                         run_with_retry(
                             lambda: chunk.to_sql(
@@ -643,6 +766,7 @@ def export_data(manifest, *args, **kwargs):
                         'load_mode': load_mode,
                         'watermark_col': watermark_col or None,
                         'watermark_val_inicio': watermark_val,
+                        'schema_changes': schema_changes,
                     })
 
                 except Exception as e:
